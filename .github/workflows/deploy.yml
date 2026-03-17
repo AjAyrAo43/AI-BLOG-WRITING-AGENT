@@ -6,7 +6,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: blog-writer-agent
+  ECR_REPOSITORY: blogagent
   EC2_HOST: ${{ secrets.EC2_HOST }}
   EC2_USER: ubuntu
 
