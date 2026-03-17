@@ -26,7 +26,7 @@ api = FastAPI(title="Blog Writing Agent API", version="1.0.0")
 # CORS for frontend development
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -266,4 +266,4 @@ if __name__ == "__main__":
     print("Starting Blog Writing Agent API server...")
     print("Frontend: http://localhost:8000")
     print("API docs: http://localhost:8000/docs")
-    uvicorn.run(api, host="127.0.0.1", port=8000)
+    uvicorn.run(api, host="0.0.0.0", port=8000)
