@@ -7,59 +7,14 @@
 // Configuration
 // ============================================================
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = '';  // Same-origin: served by FastAPI at /
 
 // ============================================================
 // State
 // ============================================================
 
 let currentBlogData = null;
-
-// ============================================================
-// DOM Elements
-// ============================================================
-
-const elements = {
-    // Form
-    generateForm: document.getElementById('generate-form'),
-    topicInput: document.getElementById('topic'),
-    dateInput: document.getElementById('as-of-date'),
-    generateBtn: document.getElementById('generate-btn'),
-
-    // States
-    welcomeState: document.getElementById('welcome-state'),
-    resultState: document.getElementById('result-state'),
-    errorState: document.getElementById('error-state'),
-    loadingOverlay: document.getElementById('loading-overlay'),
-    loadingStatus: document.getElementById('loading-status'),
-    progressFill: document.getElementById('progress-fill'),
-    errorMessage: document.getElementById('error-message'),
-
-    // Tabs
-    tabs: document.querySelectorAll('.tab'),
-    tabPanes: document.querySelectorAll('.tab-pane'),
-
-    // Plan
-    planTitle: document.getElementById('plan-title'),
-    planAudience: document.getElementById('plan-audience'),
-    planTone: document.getElementById('plan-tone'),
-    planKind: document.getElementById('plan-kind'),
-    planMode: document.getElementById('plan-mode'),
-    tasksGrid: document.getElementById('tasks-grid'),
-
-    // Evidence
-    evidenceContainer: document.getElementById('evidence-container'),
-
-    // Preview
-    markdownPreview: document.getElementById('markdown-preview'),
-
-    // Download
-    downloadMd: document.getElementById('download-md'),
-    copyMd: document.getElementById('copy-md'),
-
-    // Past Blogs
-    pastBlogsList: document.getElementById('past-blogs-list'),
-};
+let elements = {};
 
 // ============================================================
 // Initialize
@@ -70,6 +25,49 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function initializeApp() {
+    // Build element references after DOM is ready
+    elements = {
+        // Form
+        generateForm: document.getElementById('generate-form'),
+        topicInput: document.getElementById('topic'),
+        dateInput: document.getElementById('as-of-date'),
+        generateBtn: document.getElementById('generate-btn'),
+
+        // States
+        welcomeState: document.getElementById('welcome-state'),
+        resultState: document.getElementById('result-state'),
+        errorState: document.getElementById('error-state'),
+        loadingOverlay: document.getElementById('loading-overlay'),
+        loadingStatus: document.getElementById('loading-status'),
+        progressFill: document.getElementById('progress-fill'),
+        errorMessage: document.getElementById('error-message'),
+
+        // Tabs
+        tabs: document.querySelectorAll('.tab'),
+        tabPanes: document.querySelectorAll('.tab-pane'),
+
+        // Plan
+        planTitle: document.getElementById('plan-title'),
+        planAudience: document.getElementById('plan-audience'),
+        planTone: document.getElementById('plan-tone'),
+        planKind: document.getElementById('plan-kind'),
+        planMode: document.getElementById('plan-mode'),
+        tasksGrid: document.getElementById('tasks-grid'),
+
+        // Evidence
+        evidenceContainer: document.getElementById('evidence-container'),
+
+        // Preview
+        markdownPreview: document.getElementById('markdown-preview'),
+
+        // Download
+        downloadMd: document.getElementById('download-md'),
+        copyMd: document.getElementById('copy-md'),
+
+        // Past Blogs
+        pastBlogsList: document.getElementById('past-blogs-list'),
+    };
+
     // Set default date to today
     elements.dateInput.valueAsDate = new Date();
 
@@ -79,16 +77,10 @@ function initializeApp() {
     // Load past blogs
     loadPastBlogs();
 
-    // Configure marked.js
-    marked.setOptions({
-        highlight: function(code, lang) {
-            if (lang && hljs.getLanguage(lang)) {
-                return hljs.highlight(code, { language: lang }).value;
-            }
-            return hljs.highlightAuto(code).value;
-        },
-        breaks: true,
+    // Configure marked.js (v5+ API — no deprecated highlight callback)
+    marked.use({
         gfm: true,
+        breaks: true,
     });
 }
 
@@ -104,6 +96,20 @@ function setupEventListeners() {
     // Download buttons
     elements.downloadMd.addEventListener('click', handleDownloadMd);
     elements.copyMd.addEventListener('click', handleCopyMd);
+
+    // Close sidebar on overlay click (mobile)
+    document.addEventListener('click', (e) => {
+        const sidebar = document.querySelector('.sidebar');
+        const toggle = document.getElementById('sidebar-toggle');
+        if (
+            sidebar &&
+            sidebar.classList.contains('open') &&
+            !sidebar.contains(e.target) &&
+            e.target !== toggle
+        ) {
+            sidebar.classList.remove('open');
+        }
+    });
 }
 
 // ============================================================
@@ -123,7 +129,8 @@ async function generateBlog(topic, asOf) {
     });
 
     if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
     }
 
     return await response.json();
@@ -183,6 +190,9 @@ async function handleGenerate(e) {
             renderResult(result);
             showResult();
 
+            // Switch to plan tab
+            switchTab('plan');
+
             // Refresh past blogs list
             loadPastBlogs();
         } else {
@@ -211,10 +221,11 @@ function handleCopyMd() {
 
     navigator.clipboard.writeText(currentBlogData.final_markdown)
         .then(() => {
-            const originalText = elements.copyMd.querySelector('.download-title').textContent;
-            elements.copyMd.querySelector('.download-title').textContent = 'Copied!';
+            const titleEl = elements.copyMd.querySelector('.download-title');
+            const originalText = titleEl.textContent;
+            titleEl.textContent = 'Copied! ✓';
             setTimeout(() => {
-                elements.copyMd.querySelector('.download-title').textContent = originalText;
+                titleEl.textContent = originalText;
             }, 2000);
         })
         .catch(err => {
@@ -227,6 +238,7 @@ async function handleLoadPastBlog(filename) {
     try {
         showLoading();
         updateLoadingStatus('Loading blog...');
+        animateProgress(50);
 
         const data = await fetchBlogContent(filename);
 
@@ -252,18 +264,31 @@ async function handleLoadPastBlog(filename) {
             };
         }
 
+        animateProgress(100);
         renderResult(currentBlogData);
         showResult();
 
         // Switch to preview tab for loaded blogs
         switchTab('preview');
 
+        // Close sidebar on mobile after loading
+        document.querySelector('.sidebar')?.classList.remove('open');
+
     } catch (error) {
         console.error('Failed to load blog:', error);
-        alert('Failed to load blog');
+        alert('Failed to load blog: ' + error.message);
     } finally {
         hideLoading();
     }
+}
+
+// ============================================================
+// Mobile Sidebar
+// ============================================================
+
+function toggleSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.classList.toggle('open');
 }
 
 // ============================================================
@@ -272,10 +297,12 @@ async function handleLoadPastBlog(filename) {
 
 function showLoading() {
     elements.loadingOverlay.classList.remove('hidden');
+    elements.generateBtn.disabled = true;
 }
 
 function hideLoading() {
     elements.loadingOverlay.classList.add('hidden');
+    elements.generateBtn.disabled = false;
 }
 
 function updateLoadingStatus(status) {
@@ -403,7 +430,7 @@ function renderTasks(tasks) {
                 ${task.requires_code ? '<span class="task-badge code">Code</span>' : ''}
             </div>
             <ul class="task-bullets">
-                ${task.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}
+                ${(task.bullets || []).map(b => `<li>${escapeHtml(b)}</li>`).join('')}
             </ul>
         </div>
     `).join('');
@@ -411,7 +438,7 @@ function renderTasks(tasks) {
 
 function renderEvidence(evidence) {
     if (!evidence || evidence.length === 0) {
-        elements.evidenceContainer.innerHTML = '<p class="empty-state">No evidence collected (closed-book mode or no API key)</p>';
+        elements.evidenceContainer.innerHTML = '<p class="empty-state">No evidence collected (closed-book mode or no Tavily API key)</p>';
         return;
     }
 
@@ -431,7 +458,7 @@ function renderEvidence(evidence) {
                         <td>${escapeHtml(e.title || '-')}</td>
                         <td>${escapeHtml(e.source || '-')}</td>
                         <td>${escapeHtml(e.published_at || '-')}</td>
-                        <td><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">View</a></td>
+                        <td><a href="${escapeHtml(e.url)}" target="_blank" rel="noopener noreferrer">View →</a></td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -446,9 +473,10 @@ function renderMarkdown(markdown) {
     }
 
     try {
+        // marked.parse() is synchronous in v5+
         elements.markdownPreview.innerHTML = marked.parse(markdown);
 
-        // Apply syntax highlighting to code blocks
+        // Apply syntax highlighting to code blocks after rendering
         elements.markdownPreview.querySelectorAll('pre code').forEach(block => {
             hljs.highlightElement(block);
         });
@@ -462,12 +490,12 @@ async function loadPastBlogs() {
     const blogs = await fetchPastBlogs();
 
     if (blogs.length === 0) {
-        elements.pastBlogsList.innerHTML = '<p class="empty-state">No saved blogs found</p>';
+        elements.pastBlogsList.innerHTML = '<p class="empty-state">No saved blogs yet</p>';
         return;
     }
 
     elements.pastBlogsList.innerHTML = blogs.map(blog => `
-        <div class="blog-item" onclick="handleLoadPastBlog('${escapeHtml(blog.filename)}')">
+        <div class="blog-item" onclick="handleLoadPastBlog('${escapeHtml(blog.filename)}')" title="${escapeHtml(blog.title)}">
             <div class="blog-item-title">${escapeHtml(blog.title)}</div>
             <div class="blog-item-filename">${escapeHtml(blog.filename)}</div>
         </div>
@@ -479,9 +507,9 @@ async function loadPastBlogs() {
 // ============================================================
 
 function escapeHtml(text) {
-    if (!text) return '';
+    if (text === null || text === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
 }
 
@@ -497,6 +525,7 @@ function downloadFile(content, filename, mimeType) {
     URL.revokeObjectURL(url);
 }
 
-// Make hideError available globally for onclick
+// Make functions available globally for onclick attributes
 window.hideError = hideError;
 window.handleLoadPastBlog = handleLoadPastBlog;
+window.toggleSidebar = toggleSidebar;

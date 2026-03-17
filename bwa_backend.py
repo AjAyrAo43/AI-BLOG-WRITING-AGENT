@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import TypedDict, List, Optional, Literal, Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationError
+from typing import Union
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
@@ -32,13 +33,20 @@ class Task(BaseModel):
     id: int
     title: str
     goal: str = Field(..., description="One sentence describing what the reader should do/understand.")
-    bullets: List[str] = Field(..., min_length=3, max_length=6)
+    bullets: List[str] = Field(..., min_length=1, max_length=10)
     target_words: int = Field(..., description="Target words (120–550).")
 
     tags: List[str] = Field(default_factory=list)
-    requires_research: bool = False
-    requires_citations: bool = False
-    requires_code: bool = False
+    requires_research: Union[bool, str] = False
+    requires_citations: Union[bool, str] = False
+    requires_code: Union[bool, str] = False
+
+    @field_validator("requires_research", "requires_citations", "requires_code", mode="before")
+    @classmethod
+    def clean_bool(cls, v):
+        if isinstance(v, str):
+            return v.lower() == "true"
+        return bool(v)
 
 
 class Plan(BaseModel):
@@ -59,11 +67,18 @@ class EvidenceItem(BaseModel):
 
 
 class RouterDecision(BaseModel):
-    needs_research: bool
+    needs_research: Union[bool, str]
     mode: Literal["closed_book", "hybrid", "open_book"]
     reason: str
     queries: List[str] = Field(default_factory=list)
     max_results_per_query: int = Field(5)
+
+    @field_validator("needs_research", mode="before")
+    @classmethod
+    def clean_needs_research(cls, v):
+        if isinstance(v, str):
+            return v.lower() == "true"
+        return bool(v)
 
 
 class EvidencePack(BaseModel):
@@ -115,7 +130,7 @@ class State(TypedDict):
 # -----------------------------
 from langchain_groq import ChatGroq
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",  # Changed from llama-3.1-8b-instant for better structured output
+    model="llama-3.1-8b-instant",  # Switched from llama-3.3-70b-versatile to avoid TPM limits
     temperature=0
 )
 
@@ -211,7 +226,7 @@ def research_node(state: State) -> dict:
     queries = (state.get("queries") or [])[:10]
     raw: List[dict] = []
     for q in queries:
-        raw.extend(_tavily_search(q, max_results=6))
+        raw.extend(_tavily_search(q, max_results=3)) # Reduced from 6 to 3 to stay within token limits
 
     if not raw:
         return {"evidence": []}
@@ -280,7 +295,7 @@ def orchestrator_node(state: State) -> dict:
                     f"Mode: {mode}\n"
                     f"As-of: {state['as_of']} (recency_days={state['recency_days']})\n"
                     f"{'Force blog_kind=news_roundup' if forced_kind else ''}\n\n"
-                    f"Evidence:\n{[e.model_dump() for e in evidence][:16]}"
+                    f"Evidence:\n{[e.model_dump() for e in evidence][:8]}" # Reduced from 16 to 8 to stay within token limits
                 )
             ),
         ]

@@ -26,16 +26,16 @@ api = FastAPI(title="Blog Writing Agent API", version="1.0.0")
 # CORS for frontend development
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],       
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Serve static files (frontend)
-frontend_dir = Path(__file__).parent / "frontend"
-if frontend_dir.exists():
-    api.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+static_dir = Path(__file__).parent / "frontend" / "static"
+if static_dir.exists():
+    api.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 # ============================================================
@@ -99,7 +99,7 @@ class BlogSummary(BaseModel):
 @api.get("/", response_class=HTMLResponse)
 async def serve_frontend():
     """Serve the main HTML page."""
-    index_path = frontend_dir / "index.html"
+    index_path = static_dir.parent / "index.html"
     if index_path.exists():
         return FileResponse(index_path)
     return HTMLResponse("<h1>Frontend not found. Please create frontend/index.html</h1>")

@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+langchain
+langgraph
+langchain-groq
+langchain-openai
+langchain-community
+python-dotenv
+tavily-python
+pandas
+streamlit
+requests
+jinja2
+python-multipart
